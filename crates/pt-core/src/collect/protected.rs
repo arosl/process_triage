@@ -688,7 +688,7 @@ static BUILTIN_PROTECTED: std::sync::LazyLock<Vec<BuiltinRule>> = std::sync::Laz
         builtin_rule(
             "builtin.multiplexer",
             CommOrCmd,
-            r"^(\S*/)?((frankenterm|wezterm)-mux-server|tmux|zellij|screen|SCREEN|abduco|dtach)(:|\s|$)",
+            r"^(\S*/)?((frankenterm|wezterm)-mux-server|tmux|zellij|screen|SCREEN|abduco|dtach|herdr)(:|\s|$)",
             "terminal multiplexer: hosts every interactive/agent session on the machine",
         ),
         builtin_rule(
@@ -1408,6 +1408,10 @@ mod tests {
             ("wezterm-mux-ser", "/usr/bin/wezterm-mux-server --pid-file-fd 10"),
             ("tmux: server", "/usr/bin/tmux new-session -d -s frankentorch -c /data/projects/frankentorch"),
             ("tmux: client", "tmux attach -t main"),
+            // herdr runs as one binary: the server (default or a named --session) and its clients.
+            ("herdr", "/home/ubuntu/.local/bin/herdr server"),
+            ("herdr", "herdr --session acfs-probe server"),
+            ("herdr", "herdr"),
             ("ssh", "ssh -E /home/ubuntu/.ssh/rch/.ssh-connectionUXind1/log -S /home/ubuntu/.ssh/rch/.ssh-connectionUXind1/master -M -f -N vmi1149989"),
             ("ssh", "ssh -o ControlMaster=auto -o ControlPath=/tmp/cm-%r@%h ts2"),
             // ControlMaster from ssh_config: argv carries no flag, only OpenSSH's title.
@@ -1517,6 +1521,8 @@ mod tests {
             ("sleep", "sleep 14400"),
             ("ssh", "ssh ts2 uptime"),
             ("ssh", "ssh ts2 tmux ls"),
+            ("ssh", "ssh ts2 herdr pane list"),
+            ("herdrx", "herdrx serve"),
             ("ssh", "ssh ts2 nc -z db 5432"),
             ("ssh", "ssh ts2 echo [mux]"),
             ("node", "node /data/projects/app/node_modules/.bin/next dev"),

@@ -2,7 +2,7 @@
 //!
 //! This module implements user-intent features per Plan §3.2 and §8 "context priors":
 //! - Active controlling TTY / recent TTY activity
-//! - tmux/screen session attribution
+//! - tmux/screen/herdr session attribution
 //! - Recent shell activity heuristics
 //! - Repo activity windows (git status timestamps, file modification recency)
 //! - Editor focus signals (optional, privacy-safe, opt-in)
@@ -32,7 +32,7 @@
 #[cfg(target_os = "linux")]
 use crate::collect::parse_proc_stat as read_proc_stat;
 use crate::supervision::session::{
-    detect_screen_session, detect_ssh_connection, detect_tmux_session,
+    detect_herdr_session, detect_screen_session, detect_ssh_connection, detect_tmux_session,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -65,6 +65,8 @@ pub enum IntentSignalType {
     TmuxSession,
     /// Process is in a screen session.
     ScreenSession,
+    /// Process is in a herdr pane.
+    HerdrSession,
     /// Process is in an SSH session chain.
     SshSession,
     /// Process has a recent shell parent.
@@ -87,6 +89,7 @@ impl IntentSignalType {
             Self::RecentTtyActivity => "recent_tty_activity",
             Self::TmuxSession => "tmux_session",
             Self::ScreenSession => "screen_session",
+            Self::HerdrSession => "herdr_session",
             Self::SshSession => "ssh_session",
             Self::RecentShellActivity => "recent_shell_activity",
             Self::ActiveRepoContext => "active_repo_context",
@@ -103,6 +106,7 @@ impl IntentSignalType {
             Self::RecentTtyActivity => 0.8,
             Self::TmuxSession => 0.85,
             Self::ScreenSession => 0.85,
+            Self::HerdrSession => 0.85,
             Self::SshSession => 0.6,
             Self::RecentShellActivity => 0.65,
             Self::ActiveRepoContext => 0.75,
@@ -142,6 +146,11 @@ pub enum IntentMetadata {
     Screen {
         session_pid: Option<u32>,
         session_hash: String,
+    },
+    /// herdr pane info (sanitized).
+    Herdr {
+        socket_hash: Option<String>,
+        pane_hash: Option<String>,
     },
     /// SSH connection info (sanitized, no IPs).
     Ssh { connection_hash: String },
@@ -603,7 +612,7 @@ fn detect_recent_tty_activity(pid: u32, config: &UserIntentConfig) -> Option<Int
     None
 }
 
-/// Detect session multiplexer signals (tmux/screen).
+/// Detect session multiplexer signals (tmux/screen/herdr).
 #[cfg(target_os = "linux")]
 fn detect_session_mux_signals(pid: u32, config: &UserIntentConfig) -> Option<Vec<IntentEvidence>> {
     let mut evidence = Vec::new();
@@ -635,6 +644,19 @@ fn detect_session_mux_signals(pid: u32, config: &UserIntentConfig) -> Option<Vec
             metadata: Some(IntentMetadata::Screen {
                 session_pid: screen_info.pid,
                 session_hash,
+            }),
+        });
+    }
+
+    // Check for herdr pane
+    if let Some(herdr_info) = detect_herdr_session(pid) {
+        evidence.push(IntentEvidence {
+            signal_type: IntentSignalType::HerdrSession,
+            weight: config.weight_for(IntentSignalType::HerdrSession),
+            description: "Process is in a herdr pane".to_string(),
+            metadata: Some(IntentMetadata::Herdr {
+                socket_hash: herdr_info.socket_path.as_deref().map(hash_string),
+                pane_hash: herdr_info.pane_id.as_deref().map(hash_string),
             }),
         });
     }
@@ -878,6 +900,7 @@ mod tests {
     fn test_intent_signal_names() {
         assert_eq!(IntentSignalType::ActiveTty.name(), "active_tty");
         assert_eq!(IntentSignalType::TmuxSession.name(), "tmux_session");
+        assert_eq!(IntentSignalType::HerdrSession.name(), "herdr_session");
         assert_eq!(IntentSignalType::ForegroundJob.name(), "foreground_job");
     }
 
@@ -1086,6 +1109,31 @@ mod tests {
         assert!(!features.schema_version.is_empty());
     }
 
+    /// Inside a herdr pane the current process carries a herdr_session signal whose
+    /// metadata holds only hashes. Outside herdr there is nothing to check.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn herdr_pane_is_a_session_signal() {
+        let pid = std::process::id();
+        let Some(info) = detect_herdr_session(pid) else {
+            return;
+        };
+        let evidence = detect_session_mux_signals(pid, &UserIntentConfig::default())
+            .expect("herdr pane yields mux evidence");
+        let herdr = evidence
+            .iter()
+            .find(|e| e.signal_type == IntentSignalType::HerdrSession)
+            .expect("herdr_session signal");
+        assert_eq!(
+            herdr.weight,
+            IntentSignalType::HerdrSession.default_weight()
+        );
+        let json = serde_json::to_string(&herdr.metadata).unwrap();
+        for raw in [info.pane_id, info.socket_path].into_iter().flatten() {
+            assert!(!json.contains(&raw), "raw {raw:?} leaked into {json}");
+        }
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn test_collect_user_intent_batch() {
@@ -1243,6 +1291,7 @@ mod tests {
             IntentSignalType::RecentTtyActivity,
             IntentSignalType::TmuxSession,
             IntentSignalType::ScreenSession,
+            IntentSignalType::HerdrSession,
             IntentSignalType::SshSession,
             IntentSignalType::RecentShellActivity,
             IntentSignalType::ActiveRepoContext,

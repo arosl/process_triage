@@ -803,6 +803,7 @@ fn terminal_pane_chain(
             | "screen"
             | "abduco"
             | "dtach"
+            | "herdr"
     ) {
         return false;
     }
@@ -914,6 +915,28 @@ mod tests {
             );
         }
         assert!(!terminal_pane_chain(2000, PANE_PATH, |p| layout
+            .get(&p)
+            .cloned()));
+    }
+
+    #[test]
+    fn terminal_pane_accepts_herdr_server_unit() {
+        let path = "/user.slice/user-1000.slice/user@1000.service/app.slice/herdr.service";
+        let mut layout = pane_layout();
+        for node in layout.values_mut() {
+            node.cgroup = path.to_string();
+        }
+        let server = layout.get_mut(&2000).unwrap();
+        server.comm = "herdr".to_string();
+        server.executable = "/home/u/.local/bin/herdr".into();
+        server.cmdline = b"/home/u/.local/bin/herdr\0server\0".to_vec();
+        for pid in [3000, 4000] {
+            assert!(
+                terminal_pane_chain(pid, path, |p| layout.get(&p).cloned()),
+                "PID {pid}"
+            );
+        }
+        assert!(!terminal_pane_chain(2000, path, |p| layout
             .get(&p)
             .cloned()));
     }

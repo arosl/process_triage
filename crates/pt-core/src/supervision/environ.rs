@@ -298,6 +298,12 @@ impl EnvironDatabase {
             "STY",
             0.30,
         ));
+        self.add(EnvPattern::new(
+            "herdr",
+            SupervisorCategory::Terminal,
+            "HERDR_PANE_ID",
+            0.30,
+        ));
 
         // JetBrains IDEs
         self.add(EnvPattern::new(
@@ -552,6 +558,26 @@ mod tests {
             .into_iter()
             .collect();
         assert!(db.find_matches(&other).is_empty());
+    }
+
+    #[test]
+    fn herdr_pane_environment_is_recognized() {
+        let db = EnvironDatabase::with_defaults();
+        let env: HashMap<String, String> = [
+            ("HERDR_PANE_ID", "w1:pW"),
+            ("HERDR_SOCKET_PATH", "/home/u/.config/herdr/herdr.sock"),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+        let matches = db.find_matches(&env);
+        assert!(
+            matches
+                .iter()
+                .any(|(p, _)| p.supervisor_name == "herdr"
+                    && p.category == SupervisorCategory::Terminal),
+            "herdr env not recognized: {matches:?}"
+        );
     }
 
     #[test]

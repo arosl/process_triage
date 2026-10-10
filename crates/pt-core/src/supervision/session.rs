@@ -74,6 +74,8 @@ pub enum SessionProtectionType {
     ScreenServer,
     /// Process is a screen client attached to pt's session
     ScreenClient,
+    /// Process is the herdr server hosting pt's pane
+    HerdrServer,
     /// Process is part of an SSH chain to pt
     SshChain,
     /// Process is in pt's foreground process group
@@ -92,6 +94,7 @@ impl std::fmt::Display for SessionProtectionType {
             Self::TmuxClient => write!(f, "tmux client"),
             Self::ScreenServer => write!(f, "screen server"),
             Self::ScreenClient => write!(f, "screen client"),
+            Self::HerdrServer => write!(f, "herdr server"),
             Self::SshChain => write!(f, "SSH chain"),
             Self::ForegroundGroup => write!(f, "foreground process group"),
             Self::TtyController => write!(f, "TTY controller"),
@@ -349,6 +352,44 @@ pub fn detect_screen_session(pid: u32) -> Option<ScreenInfo> {
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 pub fn detect_screen_session(_pid: u32) -> Option<ScreenInfo> {
+    None
+}
+
+/// herdr session information.
+#[derive(Debug, Clone, Serialize)]
+pub struct HerdrInfo {
+    /// Path to the herdr server's socket (HERDR_SOCKET_PATH).
+    pub socket_path: Option<String>,
+    /// Pane identifier (HERDR_PANE_ID), e.g. "w1:pW".
+    pub pane_id: Option<String>,
+}
+
+impl HerdrInfo {
+    /// Parse from a process environment. herdr exports HERDR_PANE_ID and
+    /// HERDR_SOCKET_PATH into every pane; either one marks a herdr pane.
+    pub fn from_env(env: &HashMap<String, String>) -> Option<Self> {
+        let get = |key: &str| env.get(key).filter(|v| !v.is_empty()).cloned();
+        let socket_path = get("HERDR_SOCKET_PATH");
+        let pane_id = get("HERDR_PANE_ID");
+        if socket_path.is_none() && pane_id.is_none() {
+            return None;
+        }
+        Some(Self {
+            socket_path,
+            pane_id,
+        })
+    }
+}
+
+/// Detect herdr session from environment.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub fn detect_herdr_session(pid: u32) -> Option<HerdrInfo> {
+    let env = read_environ(pid).ok()?;
+    HerdrInfo::from_env(&env)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+pub fn detect_herdr_session(_pid: u32) -> Option<HerdrInfo> {
     None
 }
 
@@ -646,6 +687,27 @@ impl SessionAnalyzer {
                     }
                 }
             }
+
+            // Check herdr: its server is the parent of every pane's shell, so the
+            // server hosting pt is the herdr process in pt's ancestry.
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
+            if let Some(herdr_info) = detect_herdr_session(pt_pid) {
+                if let Some(stat) = self.get_stat(target_pid) {
+                    if stat.comm == "herdr" && self.get_ancestry(pt_pid).contains(&target_pid) {
+                        protection_types.push(SessionProtectionType::HerdrServer);
+                        evidence.push(SessionEvidence {
+                            protection_type: SessionProtectionType::HerdrServer,
+                            description: format!(
+                                "PID {} (herdr) is in pt's ancestry chain (pane: {})",
+                                target_pid,
+                                herdr_info.pane_id.as_deref().unwrap_or("unknown")
+                            ),
+                            weight: 1.0,
+                        });
+                        debug!(target_pid, socket = ?herdr_info.socket_path, "target is pt's herdr server");
+                    }
+                }
+            }
         }
 
         // Check 5: SSH chain protection
@@ -870,6 +932,32 @@ mod tests {
     }
 
     #[test]
+    fn test_herdr_info_from_env() {
+        let env = |pairs: &[(&str, &str)]| -> HashMap<String, String> {
+            pairs
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect()
+        };
+        let info = HerdrInfo::from_env(&env(&[
+            ("HERDR_PANE_ID", "w1:pW"),
+            ("HERDR_SOCKET_PATH", "/home/u/.config/herdr/herdr.sock"),
+        ]))
+        .unwrap();
+        assert_eq!(info.pane_id.as_deref(), Some("w1:pW"));
+        assert_eq!(
+            info.socket_path.as_deref(),
+            Some("/home/u/.config/herdr/herdr.sock")
+        );
+        let socket_only =
+            HerdrInfo::from_env(&env(&[("HERDR_SOCKET_PATH", "/run/h.sock")])).unwrap();
+        assert_eq!(socket_only.pane_id, None);
+        assert!(HerdrInfo::from_env(&env(&[])).is_none());
+        assert!(HerdrInfo::from_env(&env(&[("HERDR_PANE_ID", "")])).is_none());
+        assert!(HerdrInfo::from_env(&env(&[("TMUX", "/tmp/tmux-1000/default,1,0")])).is_none());
+    }
+
+    #[test]
     fn test_session_result_not_protected() {
         let result = SessionResult::not_protected();
         assert!(!result.is_protected);
@@ -1007,6 +1095,32 @@ mod tests {
 
             // Current process should be in its own session
             assert!(result.session_id.is_some());
+        }
+
+        /// Run inside a herdr pane, the herdr server in pt's ancestry is protected.
+        /// Outside herdr (CI, remote workers) there is nothing to check.
+        #[test]
+        fn herdr_server_in_ancestry_is_protected() {
+            let pid = std::process::id();
+            if detect_herdr_session(pid).is_none() {
+                return;
+            }
+            let mut analyzer = SessionAnalyzer::new();
+            let Some(server) = analyzer
+                .get_ancestry(pid)
+                .into_iter()
+                .find(|&p| parse_proc_stat(p).is_some_and(|s| s.comm == "herdr"))
+            else {
+                return;
+            };
+            let result = analyzer.analyze(server, pid).expect("should analyze");
+            assert!(
+                result
+                    .protection_types
+                    .contains(&SessionProtectionType::HerdrServer),
+                "{:?}",
+                result.protection_types
+            );
         }
 
         #[test]

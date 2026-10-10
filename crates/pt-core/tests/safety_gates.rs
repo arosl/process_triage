@@ -1199,6 +1199,7 @@ mod session_safety {
             SessionProtectionType::TmuxClient,
             SessionProtectionType::ScreenServer,
             SessionProtectionType::ScreenClient,
+            SessionProtectionType::HerdrServer,
             SessionProtectionType::SshChain,
             SessionProtectionType::ForegroundGroup,
             SessionProtectionType::TtyController,

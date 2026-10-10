@@ -1497,6 +1497,7 @@ impl PreCheckProvider for LivePreCheckProvider {
                                 SessionProtectionType::TmuxClient => "tmux client",
                                 SessionProtectionType::ScreenServer => "screen server",
                                 SessionProtectionType::ScreenClient => "screen client",
+                                SessionProtectionType::HerdrServer => "herdr server",
                                 SessionProtectionType::SshChain => "SSH connection chain",
                                 SessionProtectionType::ForegroundGroup => {
                                     "foreground process group"

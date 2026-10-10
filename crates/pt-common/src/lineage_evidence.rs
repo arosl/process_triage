@@ -218,7 +218,7 @@ const KNOWN_AGENTS: &[&str] = &[
 ];
 
 /// Known terminal multiplexers.
-const KNOWN_MULTIPLEXERS: &[&str] = &["tmux", "screen", "zellij"];
+const KNOWN_MULTIPLEXERS: &[&str] = &["tmux", "screen", "zellij", "herdr"];
 
 /// Normalize raw lineage evidence into classified ownership.
 pub fn normalize_lineage(evidence: &RawLineageEvidence) -> NormalizedLineage {
@@ -616,6 +616,35 @@ mod tests {
             }],
             collection_method: LineageCollectionMethod::Procfs,
             observed_at: "2026-03-15T20:00:00Z".to_string(),
+        };
+
+        let result = normalize_lineage(&evidence);
+        match &result.ownership {
+            OwnershipState::Supervised { supervisor } => {
+                assert_eq!(supervisor.kind, SupervisorKind::TerminalMultiplexer);
+            }
+            other => panic!("expected Supervised(TerminalMultiplexer), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn herdr_detected_as_multiplexer() {
+        let evidence = RawLineageEvidence {
+            pid: 4000,
+            ppid: 3500,
+            pgid: 3500,
+            sid: 3500,
+            uid: 1000,
+            user: None,
+            tty: None,
+            supervisor: None,
+            ancestors: vec![AncestorEntry {
+                pid: 3500,
+                comm: "herdr".to_string(),
+                uid: 1000,
+            }],
+            collection_method: LineageCollectionMethod::Procfs,
+            observed_at: "2026-10-10T08:00:00Z".to_string(),
         };
 
         let result = normalize_lineage(&evidence);
