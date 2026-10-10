@@ -615,6 +615,26 @@ setup_installer_test_env() {
     test_end "upgrade" "pass"
 }
 
+@test "installer: a suffixed release already installed is not reinstalled" {
+    test_start "suffixed version" "verify 2.3.0-herdr.1 matches itself, not 2.3.0"
+
+    setup_installer_test_env "2.3.0-herdr.1" "Linux" "x86_64"
+
+    create_fake_pt_wrapper "2.3.0-herdr.1" "$INSTALL_DEST/pt"
+    create_fake_pt_core "2.3.0-herdr.1" "$INSTALL_DEST/pt-core"
+
+    export DEST="$INSTALL_DEST"
+    export PT_NO_PATH=1
+    export PT_REFRESHED=1
+
+    run bash "$INSTALLER_PATH"
+
+    [ "$status" -eq 0 ]
+    assert_contains "$output" "pt 2.3.0-herdr.1 is already installed"
+
+    test_end "suffixed version" "pass"
+}
+
 @test "installer: upgrade is atomic (no partial install)" {
     test_start "atomic upgrade" "verify failed upgrade doesn't leave partial state"
 

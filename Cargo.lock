@@ -4043,7 +4043,7 @@ dependencies = [
 
 [[package]]
 name = "pt-core"
-version = "2.3.0"
+version = "2.3.0-herdr.1"
 dependencies = [
  "assert_cmd",
  "base64",

@@ -3,10 +3,10 @@
 # install.sh - Process Triage (pt) Installer
 #
 # One-line install (with cache buster):
-#   curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/process_triage/main/install.sh?$(date +%s)" | bash
+#   curl -fsSL "https://raw.githubusercontent.com/arosl/process_triage/main/install.sh?$(date +%s)" | bash
 #
 # One-line install (stable URL):
-#   curl -fsSL https://raw.githubusercontent.com/Dicklesworthstone/process_triage/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/arosl/process_triage/main/install.sh | bash
 #
 # Common options:
 #   --version 2.0.5        Install a specific release
@@ -27,7 +27,9 @@ set -euo pipefail
 umask 022
 shopt -s lastpipe 2>/dev/null || true
 
-OWNER="${OWNER:-Dicklesworthstone}"
+# The herdr-aware fork (arosl) publishes its own releases; upstream's lack the
+# herdr multiplexer rule.
+OWNER="${OWNER:-arosl}"
 REPO="${REPO:-process_triage}"
 GITHUB_REPO="${OWNER}/${REPO}"
 RAW_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/main"
@@ -676,7 +678,9 @@ check_network() {
 get_installed_version() {
     local bin="$1"
     [[ -x "$bin" ]] || return 0
-    "$bin" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true
+    # Keep a pre-release suffix (2.3.0-herdr.1): without it the installed
+    # version never equals the release's, and every run reinstalls.
+    "$bin" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?' | head -1 || true
 }
 
 check_existing_install() {

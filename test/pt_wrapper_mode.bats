@@ -383,7 +383,7 @@ EOF
         "$PT_SCRIPT" update
 
     [ "$status" -eq 0 ]
-    grep -qx 'https://api.github.com/repos/Dicklesworthstone/process_triage/releases/latest' "$curl_log"
+    grep -qx 'https://api.github.com/repos/arosl/process_triage/releases/latest' "$curl_log"
     grep -q '/v9.9.9/install.sh' "$curl_log"
     [ "$(wc -l < "$curl_log")" -eq 2 ]
 }
@@ -419,7 +419,7 @@ EOF
     [ "$status" -eq 1 ]
     [[ "$output" == *"invalid published release tag"* ]]
     [[ "$output" != *"Updating Process Triage"* ]]
-    grep -qx 'https://api.github.com/repos/Dicklesworthstone/process_triage/releases/latest' "$curl_log"
+    grep -qx 'https://api.github.com/repos/arosl/process_triage/releases/latest' "$curl_log"
     [ "$(wc -l < "$curl_log")" -eq 1 ]
 }
 
@@ -447,7 +447,7 @@ EOF
         [[ "$output" == *"invalid published release metadata"* ]]
         [[ "$output" != *"Updating Process Triage"* ]]
         [ "$(wc -l < "$log")" -eq 1 ]
-        grep -qx 'https://api.github.com/repos/Dicklesworthstone/process_triage/releases/latest' "$log"
+        grep -qx 'https://api.github.com/repos/arosl/process_triage/releases/latest' "$log"
     done
 }
 
@@ -506,8 +506,8 @@ EOF
         PATH="$MOCK_BIN_DIR" TMPDIR="$TEST_DIR" "$PT_SCRIPT" update
     [ "$status" -eq 0 ]
     [ "$(wc -l < "$download_log")" -eq 2 ]
-    grep -qx 'https://api.github.com/repos/Dicklesworthstone/process_triage/releases/latest' "$download_log"
-    grep -qx 'https://raw.githubusercontent.com/Dicklesworthstone/process_triage/v9.9.9/install.sh' "$download_log"
+    grep -qx 'https://api.github.com/repos/arosl/process_triage/releases/latest' "$download_log"
+    grep -qx 'https://raw.githubusercontent.com/arosl/process_triage/v9.9.9/install.sh' "$download_log"
     grep -qx 'INSTALLER_ARGS=--verify' "$installer_log"
     grep -qx 'INSTALLER_VERIFY=1' "$installer_log"
 }
@@ -532,7 +532,7 @@ EOF
         "$PT_SCRIPT" update
     [ "$status" -eq 0 ]
     [[ "$output" == *"retained installer invoked"* ]]
-    grep -qx 'https://raw.githubusercontent.com/Dicklesworthstone/process_triage/9.9.9/install.sh' "$log"
+    grep -qx 'https://raw.githubusercontent.com/arosl/process_triage/9.9.9/install.sh' "$log"
     local -a installers=("${TEST_DIR}"/pt-install.*)
     [ "${#installers[@]}" -eq 1 ]
     [ -f "${installers[0]}" ]
